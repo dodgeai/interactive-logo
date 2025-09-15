@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Interactive Logo – Push Away</title>
+<style>
+  /* Reset & canvas */
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: transparent; /* keep iframe background transparent */
+  }
+  .frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    background: transparent;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Centered “float” wrapper (CSS idle bobbing) */
+  .float {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%); /* baseline center */
+    animation: floatY 8s ease-in-out infinite;
+    will-change: transform;
+  }
+  @keyframes floatY {
+    0%   { transform: translate(-50%,-50%) translateY(0); }
+    50%  { transform: translate(-50%,-50%) translateY(-12px); }
+    100% { transform: translate(-50%,-50%) translateY(0); }
+  }
+
+  /* Your logo image (exact PNG, no visual changes) */
+  .logo {
+    display: block;
+    width: min(80vmin, 380px); /* responsive size inside iframe */
+    height: auto;
+    will-change: transform, filter;
+    transition: filter .2s ease-out;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,.08)); /* subtle neutral shadow */
+  }
+  .frame:hover .logo { filter: drop-shadow(0 12px 24px rgba(0,0,0,.12)); }
+
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .float { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="frame" id="stage" aria-label="Interactive logo">
+    <div class="float" id="floater">
+      <img
+        id="logo"
+        class="logo"
+        alt="Lastgen logo"
+        src="https://static1.squarespace.com/static/68b550361aaf4c6747b5aa9a/t/68c7b7064529786b2494a433/1757918982350/WhatsApp_Image_2025-08-25_at_5.13.24_PM__1__removebg-preview.png" />
+    </div>
+  </div>
+
+<script>
+(() => {
+  const stage  = document.getElementById('stage');
+  const logo   = document.getElementById('logo');
+
+  // ------- Tunables -------
+  const MAX_SHIFT = 16;   // px the logo can be nudged away from the cursor
+  const MAX_TILT  = 4;    // deg of subtle tilt while it’s nudged
+  const SPRING    = 0.14; // higher = snappier to target
+  const FRICTION  = 0.85; // lower = bouncier (0..1)
+  // ------------------------
+
+  let targetX = 0, targetY = 0; // where we want to nudge to
+  let curX = 0, curY = 0;       // current offset
+  let vx = 0, vy = 0;           // velocity
+  let raf = null;
+
+  function requestTick(){
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
+  function onMove(e){
+    const r = stage.getBoundingClientRect();
+    const cx = r.left + r.width  / 2;
+    const cy = r.top  + r.height / 2;
+
+    const mx = e.clientX ?? (e.touches && e.touches[0].clientX);
+    const my = e.clientY ?? (e.touches && e.touches[0].clientY);
+    if (mx == null || my == null) return;
+
+    // Vector from center to cursor, normalized [-1..1]
+    const nx = (mx - cx) / (r.width  / 2);
+    const ny = (my - cy) / (r.height / 2);
+
+    // Push AWAY from cursor (invert)
+    targetX = Math.max(-1, Math.min(1, -nx)) * MAX_SHIFT;
+    targetY = Math.max(-1, Math.min(1, -ny)) * MAX_SHIFT;
+
+    requestTick();
+  }
+
+  function onLeave(){
+    // Glide back to rest
+    targetX = 0; targetY = 0;
+    requestTick();
+  }
+
+  function tick(){
+    // spring toward target
+    vx += (targetX - curX) * SPRING;
+    vy += (targetY - curY) * SPRING;
+    vx *= FRICTION;
+    vy *= FRICTION;
+    curX += vx;
+    curY += vy;
+
+    const tiltX =  (curY / MAX_SHIFT) *  MAX_TILT; // tilt opposite the push
+    const tiltY = -(curX / MAX_SHIFT) *  MAX_TILT;
+
+    logo.style.transform =
+      `translate(${curX}px, ${curY}px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+
+    // keep animating while we’re not at rest
+    if (Math.hypot(targetX - curX, targetY - curY) > 0.05 || Math.hypot(vx,vy) > 0.05) {
+      raf = requestAnimationFrame(tick);
+    } else {
+      raf = null;
+    }
+  }
+
+  // Mouse + touch support
+  stage.addEventListener('mousemove', onMove, { passive: true });
+  stage.addEventListener('mouseleave', onLeave, { passive: true });
+  stage.addEventListener('touchstart', onMove, { passive: true });
+  stage.addEventListener('touchmove',  onMove, { passive: true });
+  stage.addEventListener('touchend',   onLeave, { passive: true });
+})();
+</script>
+</body>
+</html>
